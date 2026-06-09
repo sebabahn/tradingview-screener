@@ -28,7 +28,3 @@ Gerne erweitern mit:
 - Multi-Timeframe-Unterstützung
 - Alert-Funktionen
 - Performance-Statistiken
-
----
-
-**Möchtest du**, dass ich die komplette README.md mit Badge, Screenshots-Platzhaltern, Lizenz etc. erstelle und direkt in die Datei schreibe?

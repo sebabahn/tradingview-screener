@@ -1,0 +1,57 @@
+using System;
+using System.Drawing;
+using AgenaTrader.API;
+using AgenaTrader.Custom;
+
+namespace AgenaTrader.UserCode
+{
+    [Description("Berechnet die prozentuale Differenz zwischen SMA50 und SMA20: ((SMA50 - SMA20) / SMA20) * 100")]
+    [IsEntryPoint(true)]
+    public class SMA_Percentage_Diff : UserIndicator
+    {
+        protected override void OnInit()
+        {
+            // Indikator-Einstellungen
+            IsOverlay = false;                    // Oszillator unter dem Chart
+            AddOutput(new OutputDescriptor(Color.FromKnownColor(KnownColor.Blue), "SMA % Diff"));
+            
+            // Standard-Parameter
+            SMAFast = 20;
+            SMASlow = 50;
+        }
+
+        protected override void OnCalculate()
+        {
+            // Vermeide Berechnung bei ungenügend Daten
+            if (SMA(SMAFast)[0] == 0 || SMA(SMASlow)[0] == 0)
+            {
+                Outputs[0].Set(0);
+                return;
+            }
+
+            double sma20 = SMA(SMAFast)[0];
+            double sma50 = SMA(SMASlow)[0];
+
+            if (sma20 == 0)
+            {
+                Outputs[0].Set(0);
+                return;
+            }
+
+            double percentageDiff = ((sma50 - sma20) / sma20) * 100;
+            Outputs[0].Set(percentageDiff);
+        }
+
+        #region Properties
+
+        [Parameter("SMA Fast (kurz)")]
+        [InputParameter(10, 200)]
+        public int SMAFast { get; set; }
+
+        [Parameter("SMA Slow (lang)")]
+        [InputParameter(10, 200)]
+        public int SMASlow { get; set; }
+
+        #endregion
+    }
+}

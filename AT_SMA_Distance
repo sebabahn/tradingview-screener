@@ -1,57 +1,72 @@
+#region Usings
 using System;
+using System.ComponentModel;
 using System.Drawing;
+using System.Xml.Serialization;
 using AgenaTrader.API;
 using AgenaTrader.Custom;
+#endregion
 
 namespace AgenaTrader.UserCode
 {
-    [Description("Berechnet die prozentuale Differenz zwischen SMA50 und SMA20: ((SMA50 - SMA20) / SMA20) * 100")]
-    [IsEntryPoint(true)]
-    public class SMA_Percentage_Diff : UserIndicator
+    [Description("Prozentuale Differenz zwischen SMA50 und SMA20: ((SMA50 - SMA20) / SMA20) * 100")]
+    public class SMA_Prozent_Diff : UserIndicator
     {
+        #region Parameters
+        [Category("Parameter")]
+        [Description("Periode der schnellen SMA (Standard: 20)")]
+        [Browsable(true)]
+        public int FastPeriod { get; set; } = 20;
+
+        [Category("Parameter")]
+        [Description("Periode der langsamen SMA (Standard: 50)")]
+        [Browsable(true)]
+        public int SlowPeriod { get; set; } = 50;
+        #endregion
+
         protected override void OnInit()
         {
-            // Indikator-Einstellungen
-            IsOverlay = false;                    // Oszillator unter dem Chart
-            AddOutput(new OutputDescriptor(Color.FromKnownColor(KnownColor.Blue), "SMA % Diff"));
-            
-            // Standard-Parameter
-            SMAFast = 20;
-            SMASlow = 50;
+            // Plot in eigenem Pane (nicht über dem Chart)
+            AddOutput(new OutputDescriptor(Color.Blue, "SMA % Diff"));
+
+            // Horizontale Null-Linie
+            AddLine(new LevelLine(Color.Gray, 0, "Zero"));
+
+            // Mindestens so viele Bars wie die langsamste SMA benötigt
+            this.RequiredBarsCount = SlowPeriod;
+
+            // Optional: Nur auf geschlossenen Bars berechnen (empfohlen für stabile Signale)
+            CalculateOnClosedBar = true;
         }
 
         protected override void OnCalculate()
         {
-            // Vermeide Berechnung bei ungenügend Daten
-            if (SMA(SMAFast)[0] == 0 || SMA(SMASlow)[0] == 0)
-            {
-                Outputs[0].Set(0);
+            double smaFast = SMA(FastPeriod)[0];
+            double smaSlow = SMA(SlowPeriod)[0];
+
+            // Vermeide Division durch Null
+            if (smaFast == 0)
                 return;
-            }
 
-            double sma20 = SMA(SMAFast)[0];
-            double sma50 = SMA(SMASlow)[0];
+            // Berechnung der Formel
+            double percentDiff = ((smaSlow - smaFast) / smaFast) * 100.0;
 
-            if (sma20 == 0)
-            {
-                Outputs[0].Set(0);
-                return;
-            }
+            // Wert setzen
+            Outputs[0].Set(percentDiff);
 
-            double percentageDiff = ((sma50 - sma20) / sma20) * 100;
-            Outputs[0].Set(percentageDiff);
+            // Farbwechsel: Grün = positiv (SMA50 > SMA20), Rot = negativ
+            if (percentDiff >= 0)
+                OutputDescriptor[0].PlotColor = Color.LimeGreen;
+            else
+                OutputDescriptor[0].PlotColor = Color.Red;
         }
 
-        #region Properties
-
-        [Parameter("SMA Fast (kurz)")]
-        [InputParameter(10, 200)]
-        public int SMAFast { get; set; }
-
-        [Parameter("SMA Slow (lang)")]
-        [InputParameter(10, 200)]
-        public int SMASlow { get; set; }
-
-        #endregion
+        // Zugriff auf den Plot von außen (z. B. in Conditions/Strategien)
+        [Browsable(false)]
+        [XmlIgnore()]
+        public DataSeries PercentDiff
+        {
+            get { return Outputs[0]; }
+        }
     }
 }

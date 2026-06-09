@@ -5,31 +5,33 @@ using System.Drawing;
 using System.Xml.Serialization;
 using AgenaTrader.API;
 using AgenaTrader.Custom;
-using AgenaTrader.Plugins;     // ← WICHTIG für IDataSeries / DataSeries
+using AgenaTrader.Plugins;
 #endregion
 
 namespace AgenaTrader.UserCode
 {
-    [Description("Prozentuale Differenz SMA50 zu SMA20: ((SMA50 - SMA20) / SMA20) * 100")]
-    [Category("Trend")]
-    public class SMA_Prozent_Diff : UserIndicator
+    [Description("Prozentuale Differenz SMA50 zu SMA20")]
+    public class I_SMA_Distance : UserIndicator
     {
         #region Parameters
         [Category("Parameter")]
-        [Description("Periode der schnellen SMA")]
-        public int FastPeriod { get; set; } = 20;
+        [Description("Periode schnelle SMA")]
+        public int FastPeriod { get; set; }
 
         [Category("Parameter")]
-        [Description("Periode der langsamen SMA")]
-        public int SlowPeriod { get; set; } = 50;
+        [Description("Periode langsame SMA")]
+        public int SlowPeriod { get; set; }
         #endregion
 
         protected override void OnInit()
         {
-            AddOutput(new OutputDescriptor(Color.Blue, "SMA % Diff"));
+            FastPeriod = 20;
+            SlowPeriod = 50;
+
+            Add(new OutputDescriptor(Color.Blue, "SMA % Diff"));
             AddLine(new LevelLine(Color.Gray, 0, "Zero"));
 
-            this.RequiredBarsCount = SlowPeriod + 20; // Sicherheitspuffer
+            RequiredBarsCount = SlowPeriod + 20;
             CalculateOnClosedBar = true;
         }
 
@@ -45,17 +47,15 @@ namespace AgenaTrader.UserCode
             }
 
             double percentDiff = ((smaSlow - smaFast) / smaFast) * 100.0;
-
             Outputs[0].Set(percentDiff);
 
-            // Dynamische Farbe
-            OutputDescriptor[0].PlotColor = percentDiff >= 0 ? Color.LimeGreen : Color.Red;
+            // Farbe über PlotColors setzen (stabilste Variante)
+            PlotColors[0][0] = percentDiff >= 0 ? Color.LimeGreen : Color.Red;
         }
 
-        // Wichtig für Conditions, Scanner & andere Skripte
         [Browsable(false)]
         [XmlIgnore()]
-        public DataSeries PercentDiff
+        public IDataSeries PercentDiff
         {
             get { return Outputs[0]; }
         }

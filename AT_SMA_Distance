@@ -5,22 +5,22 @@ using System.Drawing;
 using System.Xml.Serialization;
 using AgenaTrader.API;
 using AgenaTrader.Custom;
+using AgenaTrader.Plugins;     // ← WICHTIG für IDataSeries / DataSeries
 #endregion
 
 namespace AgenaTrader.UserCode
 {
-    [Description("Prozentuale Differenz zwischen SMA50 und SMA20: ((SMA50 - SMA20) / SMA20) * 100")]
+    [Description("Prozentuale Differenz SMA50 zu SMA20: ((SMA50 - SMA20) / SMA20) * 100")]
+    [Category("Trend")]
     public class SMA_Prozent_Diff : UserIndicator
     {
         #region Parameters
         [Category("Parameter")]
         [Description("Periode der schnellen SMA")]
-        [Browsable(true)]
         public int FastPeriod { get; set; } = 20;
 
         [Category("Parameter")]
         [Description("Periode der langsamen SMA")]
-        [Browsable(true)]
         public int SlowPeriod { get; set; } = 50;
         #endregion
 
@@ -29,7 +29,7 @@ namespace AgenaTrader.UserCode
             AddOutput(new OutputDescriptor(Color.Blue, "SMA % Diff"));
             AddLine(new LevelLine(Color.Gray, 0, "Zero"));
 
-            this.RequiredBarsCount = SlowPeriod + 10; // Sicherheitspuffer
+            this.RequiredBarsCount = SlowPeriod + 20; // Sicherheitspuffer
             CalculateOnClosedBar = true;
         }
 
@@ -38,7 +38,7 @@ namespace AgenaTrader.UserCode
             double smaFast = SMA(FastPeriod)[0];
             double smaSlow = SMA(SlowPeriod)[0];
 
-            if (smaFast == 0) 
+            if (smaFast == 0 || double.IsNaN(smaFast) || double.IsNaN(smaSlow))
             {
                 Outputs[0].Set(0);
                 return;
@@ -48,14 +48,11 @@ namespace AgenaTrader.UserCode
 
             Outputs[0].Set(percentDiff);
 
-            // Farbwechsel je nach Vorzeichen
-            if (percentDiff >= 0)
-                OutputDescriptor[0].PlotColor = Color.LimeGreen;
-            else
-                OutputDescriptor[0].PlotColor = Color.Red;
+            // Dynamische Farbe
+            OutputDescriptor[0].PlotColor = percentDiff >= 0 ? Color.LimeGreen : Color.Red;
         }
 
-        // Wichtig für Conditions & Scanner (DataSeries statt IDataSeries!)
+        // Wichtig für Conditions, Scanner & andere Skripte
         [Browsable(false)]
         [XmlIgnore()]
         public DataSeries PercentDiff

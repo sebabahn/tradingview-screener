@@ -1,0 +1,79 @@
+//@version=6
+indicator(title="BBW Filter mit SMA-Trend", shorttitle="BBW Trend Filter", overlay=false, format=format.price, precision=2)
+ 
+// --- Inputs ---
+length    = input.int(20, minval = 1, title = "BB Länge")
+src       = input(close, title = "Quelle")
+mult      = input.float(2.0, minval = 0.001, maxval = 50, title = "Standardabweichung")
+expansionLengthInput    = input.int(125, minval = 1, title = "Höchste Expansion Läng")
+contractionLengthInput    = input.int(125, minval = 1, title = "Niedrigste Kontraktion Länge")
+smadistancemax      = input.float(7.5, minval = 0.001, maxval = 100, title = "Maximale Abweichung SMA50 / SMA0 in %")
+ 
+// expansionLengthInput   = input.int(75, "Höchste Expansion Länge")
+// contractionLengthInput = input.int(75, "Niedrigste Kontraktion Länge")
+ 
+// Filter-Aktivierung für das Bollinger BandWidth
+showSqueeze   = input.bool(true, title = "Filter nach Squeeze (Kontraktion)")
+showExpansion = input.bool(true, title = "Filter nach Expansion (Ausbruch)")
+ 
+// --- Berechnungen (Bollinger Bands) ---
+basis = ta.sma(src, length)
+dev   = mult * ta.stdev(src, length)
+upper = basis + dev
+lower = basis - dev
+bbw   = ((upper - lower) / basis) * 100
+ 
+highestExpansion   = ta.highest(bbw, expansionLengthInput)
+lowestContraction  = ta.lowest(bbw, contractionLengthInput)
+ 
+// --- Berechnungen (Gleitende Durchschnitte) ---
+sma20 = ta.sma(src, 20)
+sma50 = ta.sma(src, 50)
+ 
+// --- Die neuen Bedingungen ---
+// 1. SMA 50 muss über dem SMA 20 liegen
+smaCondition1 = (sma50 > sma20)
+ 
+// 2. Der Abstand zwischen SMA 50 und SMA 20 muss kleiner als 5% des SMA 50 sein
+// Formel: ((SMA50 - SMA20) / SMA50) * 100 < 5
+smaDistancePct = ((sma50 - sma20) / sma20) * 100
+smaCondition2  = (smaDistancePct < smadistancemax)
+ 
+// Kombination der SMA-Trendfilter
+trendFilterActive = smaCondition1 and smaCondition2
+ 
+// --- Filter-Logik (Zustände mit Trend-Kopplung) ---
+// Ein Signal schlägt nur an, wenn AUCH die SMA-Bedingungen erfüllt sind
+isSqueeze   = (bbw == lowestContraction) and trendFilterActive
+isExpansion = (bbw == highestExpansion) and trendFilterActive
+ 
+// --- Visuelle Darstellung im Oszillator-Fenster ---
+// Hintergrundfarbe ändert sich nur, wenn das BBW-Signal UND der SMA-Filter matchen
+bgcolor(isSqueeze and showSqueeze ? color.new(#089981, 85) : na, title = "Squeeze + Trend Background")
+bgcolor(isExpansion and showExpansion ? color.new(#F23645, 85) : na, title = "Expansion + Trend Background")
+ 
+// Die Linien zur Orientierung
+plot(bbw, "Bollinger BandWidth", color = #2962FF, linewidth = 2)
+plot(highestExpansion,  "Höchste Expansion",  color = color.new(#F23645, 50), style = plot.style_circles)
+plot(lowestContraction, "Niedrigste Kontraktion", color = color.new(#089981, 50), style = plot.style_circles)
+ 
+// --- Dashboard-Tabelle für den schnellen Überblick ---
+var table filterTable = table.new(position = position.top_right, columns = 2, rows = 3, border_width = 1)
+if barstate.islast
+    // Zeile 1: SMA Status
+    table.cell(filterTable, 0, 0, "SMA Trend-Filter", bgcolor = color.gray, text_color = color.white, text_size = size.small)
+    table.cell(filterTable, 1, 0, trendFilterActive ? "BEREIT" : "Kein Match", bgcolor = trendFilterActive ? color.orange : #2a2e39, text_color = color.white, text_size = size.small)
+ 
+    // Zeile 2: Squeeze Zeile
+    table.cell(filterTable, 0, 1, "Squeeze (Kompression)", bgcolor = color.gray, text_color = color.white, text_size = size.small)
+    table.cell(filterTable, 1, 1, isSqueeze ? "SIGNAL" : "Nein", bgcolor = isSqueeze ? #089981 : #2a2e39, text_color = color.white, text_size = size.small)
+   
+    // Zeile 3: Expansion Zeile
+    table.cell(filterTable, 0, 2, "Expansion (Ausbruch)", bgcolor = color.gray, text_color = color.white, text_size = size.small)
+    table.cell(filterTable, 1, 2, isExpansion ? "SIGNAL" : "Nein", bgcolor = isExpansion ? #F23645 : #2a2e39, text_color = color.white, text_size = size.small)
+ 
+// --- Alerte / Ausgabe-Schnittstelle für den TradingView-Screener ---
+// Wert 1 bedeutet: BBW-Ausbruch/-Kompression liegt vor UND SMA-Trend passt.
+plot(isSqueeze ? 1 : 0, "Signal: Squeeze + Trend", display = display.none)
+plot(isExpansion ? 1 : 0, "Signal: Expansion + Trend", display = display.none)
+ 

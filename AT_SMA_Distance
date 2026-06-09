@@ -14,28 +14,22 @@ namespace AgenaTrader.UserCode
     {
         #region Parameters
         [Category("Parameter")]
-        [Description("Periode der schnellen SMA (Standard: 20)")]
+        [Description("Periode der schnellen SMA")]
         [Browsable(true)]
         public int FastPeriod { get; set; } = 20;
 
         [Category("Parameter")]
-        [Description("Periode der langsamen SMA (Standard: 50)")]
+        [Description("Periode der langsamen SMA")]
         [Browsable(true)]
         public int SlowPeriod { get; set; } = 50;
         #endregion
 
         protected override void OnInit()
         {
-            // Plot in eigenem Pane (nicht über dem Chart)
             AddOutput(new OutputDescriptor(Color.Blue, "SMA % Diff"));
-
-            // Horizontale Null-Linie
             AddLine(new LevelLine(Color.Gray, 0, "Zero"));
 
-            // Mindestens so viele Bars wie die langsamste SMA benötigt
-            this.RequiredBarsCount = SlowPeriod;
-
-            // Optional: Nur auf geschlossenen Bars berechnen (empfohlen für stabile Signale)
+            this.RequiredBarsCount = SlowPeriod + 10; // Sicherheitspuffer
             CalculateOnClosedBar = true;
         }
 
@@ -44,24 +38,24 @@ namespace AgenaTrader.UserCode
             double smaFast = SMA(FastPeriod)[0];
             double smaSlow = SMA(SlowPeriod)[0];
 
-            // Vermeide Division durch Null
-            if (smaFast == 0)
+            if (smaFast == 0) 
+            {
+                Outputs[0].Set(0);
                 return;
+            }
 
-            // Berechnung der Formel
             double percentDiff = ((smaSlow - smaFast) / smaFast) * 100.0;
 
-            // Wert setzen
             Outputs[0].Set(percentDiff);
 
-            // Farbwechsel: Grün = positiv (SMA50 > SMA20), Rot = negativ
+            // Farbwechsel je nach Vorzeichen
             if (percentDiff >= 0)
                 OutputDescriptor[0].PlotColor = Color.LimeGreen;
             else
                 OutputDescriptor[0].PlotColor = Color.Red;
         }
 
-        // Zugriff auf den Plot von außen (z. B. in Conditions/Strategien)
+        // Wichtig für Conditions & Scanner (DataSeries statt IDataSeries!)
         [Browsable(false)]
         [XmlIgnore()]
         public DataSeries PercentDiff

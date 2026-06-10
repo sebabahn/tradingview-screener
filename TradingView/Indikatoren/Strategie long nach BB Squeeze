@@ -58,7 +58,9 @@ touchesLowerBand = low <= lower * 1.005 // Kleiner Puffer für Rauschen
 longCondition = normalizedIndex < maxBbWidthThreshold and reversalSignal and touchesLowerBand
 
 // ================= STOP LOSS & TRAILING =================
-// Initial Stop: Tief der letzten 'atrLength' Kerzen minus ATR Puffer oder Fix-Distanz
+// Berechnung des ATR einmalig pro Bar, um Konsistenz-Warnungen zu vermeiden
+atrValue = ta.atr(14)
+
 var float initialStopPrice = na
 var bool inTrade = false
 
@@ -67,28 +69,25 @@ swingLow = ta.lowest(low, atrLength)
 
 if (longCondition and not inTrade)
     strategy.entry("Long", strategy.long)
-    initialStopPrice := swingLow - (atr(14) * 0.5) // Stop unter dem Swing Low + kleiner ATR Puffer
+    // Verwende die vorher berechnete ATR-Variable
+    initialStopPrice := swingLow - (atrValue * 0.5)
     inTrade := true
 
 // Trailing Stop Logik
+var float dynamicStop = na
+
 if (inTrade)
-    // Trail: Wenn der Preis steigt, schieben wir den Stop nach oben.
-    // Wir nutzen hier einen "Chandelier Exit" Ansatz oder Trail via ATR
-    trailingStop = close - (atr(14) * 2.5) // Dynamischer Trail basierend auf Volatilität
+    // Berechnen des dynamischen Stops unter Berücksichtigung von ATR
+    trailingStopVal = close - (atrValue * 2.5)
     
-    // Wir nehmen den höheren Wert von: Dem letzten Stop, dem SwingLow-Stop, oder dem Trailing-Stop
-    // Um es einfach zu halten: Wenn der Trade im Gewinn ist, trailen wir mit ATR * Factor
-    
-    // Aktualisiere Stop Price nur, wenn er steigt (für Long)
-    if (trailingStop > initialStopPrice or (initialStopPrice == swingLow - (atr(14) * 0.5)))
-        strategy.exit("Exit Long", "Long", stop=math.max(initialStopPrice, trailingStop), comment="Trail")
+    // Update nur, wenn der neue Stop höher ist als der bisherige (für Longs sinnvoll)
+    if na(dynamicStop) or trailingStopVal > dynamicStop
+        // Der Stop liegt mindestens so tief wie der ursprüngliche Initial-Stop oder der aktuelle Trail, whichever is higher
+        dynamicStop := math.max(initialStopPrice, trailingStopVal)
         
-    // Falls Preis sinkt und Swing Low neu gebildet wird, setze Stop auf neuen Swing Low (mit Puffer)
-    if (low < initialStopPrice[1] or low < swingLow - (atr(14) * 0.5)) 
-         // Hier könnten wir den Stop festlegen, aber die Strategie.exit Funktion macht das meist automatisch beim Auslösen oder via Nachführung
-         // Wir aktualisieren hier nur unsere Referenzvariable für den nächsten Schritt, wenn wir manuell trailen wollten.
-         // Da strategy.exit in der Schleife läuft, setzen wir den Ausstiegspreis dynamisch.
-         pass
+    // Exit Logik: Wenn wir noch im Trade sind und ein Stop-Level gesetzt haben
+    if not na(dynamicStop)
+        strategy.exit("Exit Long", "Long", stop=dynamicStop, comment="Trail")
 
 // Visualisierung der Bands und Signale
 plot(middle, title="Middle BB", color=color.gray)

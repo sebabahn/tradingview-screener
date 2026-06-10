@@ -1,0 +1,105 @@
+//@version=5
+strategy("BB Width Reversal Strategy", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=100, commission_type=strategy.commission.percent, commission_value=0.1)
+
+// ================= INPUTS =================
+// BB Width Einstellungen (muss mit Indikator übereinstimmen für Konsistenz, aber hier separat berechnbar)
+bbLen = input.int(20, "BB Länge", minval=1)
+mult  = input.float(2.0, "BB Multiplikator", step=0.1)
+histLen = input.int(125, "History Length für Normalisierung", minval=2)
+
+// Signal-Einstellungen
+maxBbWidthThreshold = input.float(20, "Max BB Width Index (Suche nur bei < diesem Wert)", minval=0, maxval=100)
+atrLength = input.int(30, "Zeitraum für Stop-Loss unter dem Tief (Kerzen)", minval=5)
+trendEmaLength = input.int(200, "Trend Filter EMA Länge", minval=10)
+
+// ================= BOLLINGER BANDS & WIDTH =================
+[middle, upper, lower] = ta.bb(close, bbLen, mult)
+bandwidth = (upper - lower) / close * 100
+maxBandwidth = ta.highest(bandwidth, histLen)
+normalizedIndex = maxBandwidth == 0 ? 0 : (bandwidth / maxBandwidth) * 100
+
+// ================= TREND FILTER =================
+emaTrend = ta.ema(close, trendEmaLength)
+isUptrend = close > emaTrend
+
+// ================= UMWERT-SIGNALE (Pattern Detection) =================
+// Helper: True Body Height
+trueBodyHeight = math.abs(open - close)
+// Helper: Upper Shadow
+upperShadow = high - math.max(open, close)
+// Helper: Lower Shadow
+lowerShadow = math.min(open, close) - low
+
+// 1. Hammer / Pinbarähnlich
+// Lange untere Schatten, kleiner Körper, wenig oder kein oberer Schatten
+isHammerLike = (lowerShadow > trueBodyHeight * 2) and (upperShadow < trueBodyHeight * 0.5) and (trueBodyHeight > 0)
+
+// 2. Bullish Engulfing
+// Aktueller grüner Körper umschließt vorherigen roten Körper komplett
+prevClose = close[1]
+prevOpen = open[1]
+isEngulfing = (close > open) and (open < prevClose) and (close > prevOpen)
+
+// 3. Doji / Shooting Star Umkehr (hier als Bullish Doji interpretiert, wenn am unteren Band)
+isDojiLike = (trueBodyHeight < (high - low) * 0.1) and (trueBodyHeight > 0)
+
+// Kombiniertes Reversal Signal
+reversalSignal = isHammerLike or isEngulfing or isDojiLike
+
+// Positionierung am unteren Bollinger Band?
+// Wir prüfen, ob die Kerze das untere Band berührt hat oder nahe daran war (Korrekturende)
+touchesLowerBand = low <= lower * 1.005 // Kleiner Puffer für Rauschen
+
+// ================= ENTRY CONDITION =================
+// Nur Long, wenn:
+// 1. Index BBWidth < Threshold (Squeeze/Expansion von unten)
+// 2. Reversal Signal vorhanden ist
+// 3. Berührung am unteren Band stattfindet
+longCondition = normalizedIndex < maxBbWidthThreshold and reversalSignal and touchesLowerBand
+
+// ================= STOP LOSS & TRAILING =================
+// Initial Stop: Tief der letzten 'atrLength' Kerzen minus ATR Puffer oder Fix-Distanz
+var float initialStopPrice = na
+var bool inTrade = false
+
+// Berechne das Tief der letzten X Kerzen
+swingLow = ta.lowest(low, atrLength)
+
+if (longCondition and not inTrade)
+    strategy.entry("Long", strategy.long)
+    initialStopPrice := swingLow - (atr(14) * 0.5) // Stop unter dem Swing Low + kleiner ATR Puffer
+    inTrade := true
+
+// Trailing Stop Logik
+if (inTrade)
+    // Trail: Wenn der Preis steigt, schieben wir den Stop nach oben.
+    // Wir nutzen hier einen "Chandelier Exit" Ansatz oder Trail via ATR
+    trailingStop = close - (atr(14) * 2.5) // Dynamischer Trail basierend auf Volatilität
+    
+    // Wir nehmen den höheren Wert von: Dem letzten Stop, dem SwingLow-Stop, oder dem Trailing-Stop
+    // Um es einfach zu halten: Wenn der Trade im Gewinn ist, trailen wir mit ATR * Factor
+    
+    // Aktualisiere Stop Price nur, wenn er steigt (für Long)
+    if (trailingStop > initialStopPrice or (initialStopPrice == swingLow - (atr(14) * 0.5)))
+        strategy.exit("Exit Long", "Long", stop=math.max(initialStopPrice, trailingStop), comment="Trail")
+        
+    // Falls Preis sinkt und Swing Low neu gebildet wird, setze Stop auf neuen Swing Low (mit Puffer)
+    if (low < initialStopPrice[1] or low < swingLow - (atr(14) * 0.5)) 
+         // Hier könnten wir den Stop festlegen, aber die Strategie.exit Funktion macht das meist automatisch beim Auslösen oder via Nachführung
+         // Wir aktualisieren hier nur unsere Referenzvariable für den nächsten Schritt, wenn wir manuell trailen wollten.
+         // Da strategy.exit in der Schleife läuft, setzen wir den Ausstiegspreis dynamisch.
+         pass
+
+// Visualisierung der Bands und Signale
+plot(middle, title="Middle BB", color=color.gray)
+p1 = plot(upper, title="Upper BB", color=color.blue)
+p2 = plot(lower, title="Lower BB", color=color.red)
+fill(p1, p2, color=color.new(color.blue, 90))
+
+// Marker für Signale
+plotshape(longCondition, title="Entry Signal", location=location.belowbar, style=shape.triangleup, color=color.green, size=size.small)
+plotshape(reversalSignal and touchesLowerBand, title="Reversal Signal", location=location.belowbar, style=shape.diamond, color=color.orange, size=size.tiny)
+
+// Plot des BB Width Index (optional, damit man es sieht)
+// Da overlay=true, zeichnen wir den Index nicht direkt in den Chart, aber wir könnten eine Panel-Fenster Simulation machen oder nur kommentieren.
+// Für reine Strategien ist der Chart wichtig. Der Index wird intern genutzt.

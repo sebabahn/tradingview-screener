@@ -1,71 +1,70 @@
 using System;
 
-// Platzieren Sie diese Methode in Ihrer Strategie-Klasse oder als statische Hilfsklasse
-public static class MorningStarHelper
+public class MorningStarLogic : Strategy // Oder Ihre Basisklasse, z.B. Indicator
 {
-    /// <summary>
-    /// Prüft das letzte 3-Balken-Muster auf Morning Star.
-    /// Zugriff auf Balken erfolgt über globale Indizes [-2], [-1], [0] der Strategie.
-    /// </summary>
-    public static bool IsMorningStar(double[] open, double[] high, double[] low, double[] close)
+    // Diese Methode kann in OnBarUpdate aufgerufen werden
+    public bool IsMorningStar()
     {
-        // Wir prüfen die letzten 3 Balken:
-        // Index [-2]: Erste Kerze (Rot)
-        // Index [-1]: Zweite Kerze (Stern/Doji)
-        // Index [0]:  Dritte Kerze (Grün - aktuell/offen)
-
-        double o1 = open[-2];
-        double c1 = close[-2];
-        double h1 = high[-2];
-        double l1 = low[-2];
-
-        double o2 = open[-1];
-        double c2 = close[-1];
-        double h2 = high[-1];
-        double l2 = low[-1];
-
-        double o3 = open[0]; // Aktuell (kann noch offen sein, daher oft auf Close[-1] für Bestätigung prüfen!)
-        double c3 = close[0]; 
-        double h3 = high[0];
-        double l3 = low[0];
-
-        // WICHTIG: Für ein verlässliches Signal sollte die dritte Kerze bereits GESCHLOSSEN sein.
-        // In Agenttrader prüfen Sie in OnBarUpdate oft auf "Closed Bars".
-        // Hier simulieren wir die Logik für die aktuelle Kerze. 
-        // Wenn Sie es als Entry nutzen, tun Sie dies im BarUpdate von [0].
-
-        // 1. Erste Kerze: Langer Roter Körper (Bearish)
-        bool isRed = c1 < o1;
-        double bodySize1 = o1 - c1;
+        // Wir prüfen die Balken -2 (erste rote), -1 (stern) und 0 (aktuelle grüne)
+        // Hinweis: In Agenttrader sind Open, Close etc. arrays/properties, die wir indizieren
         
-        // Mindestgröße des Körpers (z.B. > 0 Punkte, oder Filter gegen sehr kleine Kerzen)
+        // 1. Erste Kerze (-2): Langer roter Körper
+        double open1 = Open[-2];
+        double close1 = Close[-2];
+        double low1 = Low[-2];
+        
+        // Muss rot sein (Schlusskurs < Eröffnungskurs)
+        if (close1 >= open1) return false;
+        
+        // Körpergröße der ersten Kerze
+        double bodySize1 = open1 - close1;
+        
+        // Optional: Mindestkörperlänge filtern (z.B. > 0 Punkte), um Rauschen zu vermeiden
         if (bodySize1 <= 0) return false;
 
-        // 2. Zweite Kerze: Kleiner Körper + Lücke nach unten
-        double bodySize2 = Math.Abs(o2 - c2);
+        // 2. Zweite Kerze (-1): Kleiner Körper + Lücke nach unten
+        double open2 = Open[-1];
+        double close2 = Close[-1];
+        double low2 = Low[-1];
         
-        // Die zweite Kerze muss kleiner sein als die erste (z.B. < 50% von Body1)
-        bool isSmallStar = bodySize2 < (bodySize1 * 0.5);
+        // Körpergröße der zweiten Kerze (absolut)
+        double bodySize2 = Math.Abs(open2 - close2);
         
-        // Lücke nach unten: Das Hoch der zweiten Kerze muss unter dem Tief der ersten liegen?
-        // Oder einfach: Low des Sterns < Low der roten Kerze
-        bool hasGapDown = l2 < l1;
-
-        if (!isRed || !isSmallStar || !hasGapDown)
-            return false;
-
-        // 3. Dritte Kerze: Grüner Körper, der mehr als die Hälfte des ersten Körpers zurückgewinnt
-        bool isGreen = c3 > o3;
+        // Die zweite Kerze muss deutlich kleiner sein als die erste (z.B. < 50% der ersten)
+        if (bodySize2 >= (bodySize1 * 0.5)) return false;
         
-        // Mitte des ersten Körpers berechnen
-        double midPoint = c1 + (bodySize1 / 2.0);
+        // Lücke nach unten: Das LOW der zweiten Kerze muss unter dem LOW der ersten Kerze liegen
+        if (low2 >= low1) return false;
+
+        // 3. Dritte Kerze (0): Grüner Körper, der mehr als die Hälfte des ersten Körpers zurückgewinnt
+        double open3 = Open[0];
+        double close3 = Close[0];
         
-        // Die dritte Kerze muss über dem Mittelpunkt der ersten Kerze schließen
-        bool confirmsReversal = c3 > midPoint;
+        // Muss grün sein (Schlusskurs > Eröffnungskurs)
+        if (close3 <= open3) return false;
+        
+        // Berechne den Mittelpunkt des Körpers der ersten Kerze
+        double midPoint1 = close1 + (bodySize1 / 2.0);
+        
+        // Die dritte Kerze muss über diesem Mittelpunkt schließen
+        if (close3 <= midPoint1) return false;
 
-        if (!isGreen || !confirmsReversal)
-            return false;
-
+        // Alle Bedingungen erfüllt -> Morning Star erkannt
         return true;
+    }
+
+    public override void OnBarUpdate()
+    {
+        // Nur handeln, wenn genug Balken da sind
+        if (Bars.Count < 3) return;
+
+        // Prüfen auf das Muster
+        bool morningStarDetected = IsMorningStar();
+
+        if (morningStarDetected)
+        {
+            // Hier Ihre Aktion einfügen, z.B. EnterLong();
+            Print("Morning Star Pattern erkannt!");
+        }
     }
 }

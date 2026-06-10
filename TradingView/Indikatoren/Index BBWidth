@@ -1,0 +1,32 @@
+//@version=5
+indicator("Bollinger Bandwidth Index (125-period)", overlay=false)
+
+// --- Eingänge ---
+bbLen = input.int(20, "BB Länge", minval=1)
+mult  = input.float(2.0, "BB Multiplikator", step=0.1)
+histLen = input.int(125, "History Length für Normalisierung", minval=2)
+
+// --- Berechnung der Bollinger Bands ---
+[middle, upper, lower] = ta.bb(close, bbLen, mult)
+
+// --- Bandbreite berechnen ---
+// Breite ist die Differenz zwischen oberer und unterer Linie
+bandwidth = (upper - lower) / close * 100 // Optional: prozentual zur Close-Price normieren für bessere Vergleichbarkeit bei verschiedenen Aktienpreisen
+// Alternativ rein absolut: bandwidth = upper - lower
+
+// --- Normalisierung über die letzten histLen Perioden ---
+// Wir suchen den MAXIMUM-Wert der Bandbreite in den vergangenen 'histLen' Kerzen
+maxBandwidth = ta.highest(bandwidth, histLen)
+
+// Verhindere Division durch Null (falls in der Historie nie eine Breite > 0 war)
+normalizedIndex = maxBandwidth == 0 ? 0 : (bandwidth / maxBandwidth) * 100
+
+// --- Ausgabe auf Chart ---
+plot(normalizedIndex, title="BB Bandwidth Index", color=color.blue, linewidth=2)
+
+// Optional: Reference Lines für extreme Werte
+hline(90, "Extreme High", color=color.red, linestyle=hline.style_dashed)
+hline(10, "Extreme Low",  color=color.green, linestyle=hline.style_dashed)
+
+// Füllen zwischen 0 und Index für visuelle Darstellung
+fill(plot(0, title="Baseline", color=color.new(color.blue, 100)), plot(normalizedIndex), color=color.new(color.blue, 80))

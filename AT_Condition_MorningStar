@@ -1,0 +1,65 @@
+using AgentTraders.SDK;
+using AgentTraders.Data;
+
+public class MorningStarCondition : Condition
+{
+    // Parameter für Konfigurationsflexibilität
+    public int BodyLengthThreshold = 50; // Prozent des ATR oder fester Wert, je nach Implementation
+    public bool StrictGapUp = true;      // Muss die dritte Kerze über den Hoch der ersten schließen?
+
+    public override void OnBar(Bar currentBar, Bar previousBar1, Bar previousBar2)
+    {
+        // Wir betrachten:
+        // previousBar2 = Kerze -2 (Erste rote Kerze)
+        // previousBar1 = Kerze -1 (Der Stern/Doji)
+        // currentBar   = Kerze 0  (Die grüne Bestätigungskanne)
+
+        if (previousBar2 == null || previousBar1 == null || currentBar == null)
+            return;
+
+        // 1. Erste Kerze: Langer roter Körper
+        bool isFirstCandleBearish = previousBar2.Close < previousBar2.Open;
+        double firstBodySize = previousBar2.Open - previousBar2.Close;
+        
+        // Optional: Body muss signifikant sein (z.B. größer als der Durchschnitt der letzten 10 Kerzen oder ein Mindestanteil vom ATR)
+        // Einfacher Check: Body muss größer als die kleine Kerze des Mittels sein
+        bool firstCandleIsLong = firstBodySize > previousBar1.Close - previousBar1.Open; 
+
+        if (!isFirstCandleBearish || !firstCandleIsLong)
+            return;
+
+        // 2. Zweite Kerze: Kleiner Körper (Der Stern)
+        bool isSecondCandleSmall = Math.Abs(previousBar1.Close - previousBar1.Open) < firstBodySize * 0.5; 
+        
+        // Prüfung auf Gap Down: Tiefpunkt der zweiten Kerze muss unter dem Tiefpunkt der ersten liegen
+        bool hasGapDown = previousBar1.Low < previousBar2.Low;
+
+        if (!isSecondCandleSmall || !hasGapDown)
+            return;
+
+        // 3. Dritte Kerze: Grüner Körper, der in die erste Kerze hineinreicht
+        bool isThirdCandleBullish = currentBar.Close > currentBar.Open;
+        
+        // Der Körper der dritten Kerze muss mehr als die Hälfte des Körpers der ersten Kerze "zurückgewinnen"
+        double firstBodyHalfPoint = previousBar2.Close + (firstBodySize / 2.0);
+        bool thirdCandleReverses = currentBar.Close > firstBodyHalfPoint;
+
+        // Optional: Strengere Variante erfordert, dass die dritte Kerze über den Hoch der ersten schließt
+        if (StrictGapUp)
+        {
+            bool closesAboveHigh = currentBar.Close > previousBar2.High;
+            if (!closesAboveHigh)
+                return;
+        }
+
+        // Alle Bedingungen erfüllt: Morning Star erkannt
+        SetConditionResult(true);
+    }
+
+    private void SetConditionResult(bool value)
+    {
+        // Hier müssen Sie die spezifische Methode Ihrer Agentra Condition Klasse verwenden,
+        // um das Ergebnis zu setzen. Oft ist es einfach:
+        this.Result = value; 
+    }
+}

@@ -1,69 +1,71 @@
 using System;
-using AgentTraders.Data; // Wichtiger Namespace für Datenstrukturen in Agenttrader
 
-namespace MyConditions
+// Platzieren Sie diese Methode in Ihrer Strategie-Klasse oder als statische Hilfsklasse
+public static class MorningStarHelper
 {
-    public class MorningStarCondition
+    /// <summary>
+    /// Prüft das letzte 3-Balken-Muster auf Morning Star.
+    /// Zugriff auf Balken erfolgt über globale Indizes [-2], [-1], [0] der Strategie.
+    /// </summary>
+    public static bool IsMorningStar(double[] open, double[] high, double[] low, double[] close)
     {
-        /// <summary>
-        /// Prüft das letzte Dreier-Muster auf Morning Star.
-        /// </summary>
-        /// <param name="bars">Die zugrunde liegende Bar-Datenquelle</param>
-        /// <returns>true wenn Muster erkannt, sonst false</returns>
-        public static bool IsMorningStar(IBarSeries bars)
-        {
-            // Wir benötigen mindestens 3 Balken
-            if (bars.Count < 3)
-                return false;
+        // Wir prüfen die letzten 3 Balken:
+        // Index [-2]: Erste Kerze (Rot)
+        // Index [-1]: Zweite Kerze (Stern/Doji)
+        // Index [0]:  Dritte Kerze (Grün - aktuell/offen)
 
-            // Index-Definition:
-            // bars[bars.Count - 3] = Kerze -2 (Erste rote Kerze)
-            // bars[bars.Count - 2] = Kerze -1 (Der Stern)
-            // bars[bars.Count - 1] = Kerze  0  (Aktuelle grüne Kerze, noch "offen" oder gerade geschlossen)
-            
-            // Hinweis: In Backtesting-Logik prüfen wir oft auf 'Closed' Bars. 
-            // Wenn Sie dies in einer Strategy als Entry-Signal nutzen, achten Sie darauf, 
-            // dass Sie die Logik am Close der dritten Kerze auslösen.
+        double o1 = open[-2];
+        double c1 = close[-2];
+        double h1 = high[-2];
+        double l1 = low[-2];
 
-            IBar firstCandle = bars[bars.Count - 3];
-            IBar secondCandle = bars[bars.Count - 2];
-            IBar thirdCandle = bars[bars.Count - 1];
+        double o2 = open[-1];
+        double c2 = close[-1];
+        double h2 = high[-1];
+        double l2 = low[-1];
 
-            // 1. Erste Kerze: Long Red Candle
-            bool isFirstBearish = firstCandle.Close < firstCandle.Open;
-            
-            // Länge des ersten Körpers (in Punkten)
-            double firstBodySize = firstCandle.Open - firstCandle.Close;
-            
-            // Optional: Mindestgröße des ersten Körpers (z.B. größer als 0, um Rauschen zu filtern)
-            if (firstBodySize <= 0) return false;
+        double o3 = open[0]; // Aktuell (kann noch offen sein, daher oft auf Close[-1] für Bestätigung prüfen!)
+        double c3 = close[0]; 
+        double h3 = high[0];
+        double l3 = low[0];
 
-            // 2. Zweite Kerze: Small Body + Gap Down
-            double secondBodySize = Math.Abs(secondCandle.Open - secondCandle.Close);
-            
-            // Die zweite Kerze muss deutlich kleiner sein als die erste (z.B. < 50% der ersten)
-            bool isSecondSmall = secondBodySize < (firstBodySize * 0.5);
-            
-            // Gap Down: Das LOW der zweiten Kerze muss unter dem LOW der ersten liegen
-            bool hasGapDown = secondCandle.Low < firstCandle.Low;
+        // WICHTIG: Für ein verlässliches Signal sollte die dritte Kerze bereits GESCHLOSSEN sein.
+        // In Agenttrader prüfen Sie in OnBarUpdate oft auf "Closed Bars".
+        // Hier simulieren wir die Logik für die aktuelle Kerze. 
+        // Wenn Sie es als Entry nutzen, tun Sie dies im BarUpdate von [0].
 
-            if (!isFirstBearish || !isSecondSmall || !hasGapDown)
-                return false;
+        // 1. Erste Kerze: Langer Roter Körper (Bearish)
+        bool isRed = c1 < o1;
+        double bodySize1 = o1 - c1;
+        
+        // Mindestgröße des Körpers (z.B. > 0 Punkte, oder Filter gegen sehr kleine Kerzen)
+        if (bodySize1 <= 0) return false;
 
-            // 3. Dritte Kerze: Long Green Candle (Bestätigung)
-            bool isThirdBullish = thirdCandle.Close > thirdCandle.Open;
-            
-            // Der Körper der dritten Kerze muss mehr als die Hälfte des Körpers der ersten Kerze "zurückgewinnen"
-            // Mittelwert der ersten Kerze
-            double firstBodyMidPoint = firstCandle.Close + (firstBodySize / 2.0);
-            
-            bool hasConfirmedReversal = thirdCandle.Close > firstBodyMidPoint;
+        // 2. Zweite Kerze: Kleiner Körper + Lücke nach unten
+        double bodySize2 = Math.Abs(o2 - c2);
+        
+        // Die zweite Kerze muss kleiner sein als die erste (z.B. < 50% von Body1)
+        bool isSmallStar = bodySize2 < (bodySize1 * 0.5);
+        
+        // Lücke nach unten: Das Hoch der zweiten Kerze muss unter dem Tief der ersten liegen?
+        // Oder einfach: Low des Sterns < Low der roten Kerze
+        bool hasGapDown = l2 < l1;
 
-            if (!isThirdBullish || !hasConfirmedReversal)
-                return false;
+        if (!isRed || !isSmallStar || !hasGapDown)
+            return false;
 
-            // Alle Kriterien erfüllt
-            return true;
-        }
+        // 3. Dritte Kerze: Grüner Körper, der mehr als die Hälfte des ersten Körpers zurückgewinnt
+        bool isGreen = c3 > o3;
+        
+        // Mitte des ersten Körpers berechnen
+        double midPoint = c1 + (bodySize1 / 2.0);
+        
+        // Die dritte Kerze muss über dem Mittelpunkt der ersten Kerze schließen
+        bool confirmsReversal = c3 > midPoint;
+
+        if (!isGreen || !confirmsReversal)
+            return false;
+
+        return true;
     }
 }
